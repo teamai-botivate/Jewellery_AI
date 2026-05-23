@@ -1,0 +1,69 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+
+# Database files
+*.db
+*.sqlite3
+
+# Qdrant storage
+qdrant_storage/
+
+# HuggingFace cache
+hf_cache/
+
+# Uploads
+uploads/
+
+# Static generated files (optional)
+static/
+
+# Dataset (agar huge hai)
+dataset/
+
+# Logs
+*.log
+
+# VS Code
+.vscode/
+
+# Mac/Linux system files
+.DS_Store
+
+# Windows system files
+Thumbs.db
+
+# Pytest
+.pytest_cache/
+
+# Mypy
+.mypy_cache/
+
+# Build files
+build/
+dist/
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Temporary files
+tmp/
+temp/
+
+# Secrets / API Keys
+secrets.json
+credentials.json
+
+# Python lock/cache
+.lock
+CACHE_DIR.TAG
