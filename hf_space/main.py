@@ -381,7 +381,7 @@ def _process_single_image(file_data: tuple) -> dict:
 
 @app.post("/add-image-batch", response_model=BatchUploadResponse)
 async def add_image_batch(files: List[UploadFile] = File(...)):
-    """Upload multiple images (unlimited). Auto-batches in groups of 100 with parallel processing."""
+    """Upload multiple images (unlimited). Auto-batches in groups of 100 with 4-thread parallel processing."""
     if not files:
         raise HTTPException(400, "No files provided.")
 
@@ -407,7 +407,7 @@ async def add_image_batch(files: List[UploadFile] = File(...)):
         end_idx = min((batch_num + 1) * BATCH_SIZE, len(file_data_list))
         batch = file_data_list[start_idx:end_idx]
 
-        with ThreadPoolExecutor(max_workers=8) as executor:
+        with ThreadPoolExecutor(max_workers=4) as executor:
             futures = [executor.submit(_process_single_image, fd) for fd in batch]
             for future in futures:
                 result = future.result()
