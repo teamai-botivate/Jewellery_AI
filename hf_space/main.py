@@ -626,6 +626,35 @@ def get_upload_status(job_id: str):
     )
 
 
+@app.get("/jobs-history")
+def get_jobs_history():
+    """Get all upload jobs history."""
+    conn = sqlite3.connect(str(DB_PATH))
+    c = conn.cursor()
+
+    c.execute("""
+        SELECT job_id, status, total_files, processed_count, failed_count, created_at
+        FROM upload_jobs
+        ORDER BY created_at DESC
+        LIMIT 100
+    """)
+
+    jobs = c.fetchall()
+    conn.close()
+
+    return [
+        {
+            "job_id": job[0],
+            "status": job[1],
+            "total": job[2],
+            "processed": job[3],
+            "failed": job[4],
+            "created_at": job[5],
+        }
+        for job in jobs
+    ]
+
+
 @app.post("/add-image-batch", response_model=BatchUploadResponse)
 async def add_image_batch(files: List[UploadFile] = File(...)):
     """Upload multiple images (unlimited). Auto-batches in groups of 100 with 4-thread parallel processing."""

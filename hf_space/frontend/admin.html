@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard — Jewellery Upload Manager</title>
+  <link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <h1>🔧 Admin Dashboard</h1>
+      <p>Upload Manager & Image Gallery</p>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn tab-btn--active" data-tab="upload">Upload Images</button>
+      <button class="tab-btn" data-tab="gallery">Image Gallery</button>
+      <button class="tab-btn" data-tab="jobs">Job History</button>
+    </div>
+
+    <!-- UPLOAD TAB -->
+    <section class="tab-panel tab-panel--active" id="upload-tab">
+      <div class="card">
+        <h2>Upload Jewellery Images</h2>
+        <p class="subtitle">Upload multiple images (no limit). Background processing.</p>
+
+        <div class="upload-area" id="uploadArea">
+          <div class="upload-icon">📁</div>
+          <h3>Drop images here or click to browse</h3>
+          <p>Supports JPG, PNG, WEBP. Unlimited files.</p>
+          <input type="file" id="fileInput" accept="image/*" multiple hidden />
+          <button class="btn btn--primary" onclick="document.getElementById('fileInput').click()">
+            Select Files
+          </button>
+        </div>
+
+        <!-- Selected Files Preview -->
+        <div class="file-list" id="fileList" style="display: none;">
+          <h3>Selected Files (<span id="fileCount">0</span>)</h3>
+          <div class="files-grid" id="filesGrid"></div>
+          <div class="actions">
+            <button class="btn btn--danger" onclick="clearFiles()">Clear All</button>
+            <button class="btn btn--success" onclick="startUpload()">Start Upload</button>
+          </div>
+        </div>
+
+        <!-- Progress -->
+        <div class="progress-section" id="progressSection" style="display: none;">
+          <h3>Upload Progress</h3>
+          <div class="progress-item">
+            <div class="progress-label">
+              <span id="progressLabel">Processing...</span>
+              <span id="progressPercent">0%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-stats">
+              <span>Processed: <strong id="processedCount">0</strong></span>
+              <span>Failed: <strong id="failedCount">0</strong></span>
+              <span>Total: <strong id="totalCount">0</strong></span>
+            </div>
+          </div>
+          <p class="job-id">Job ID: <code id="jobIdDisplay"></code></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- GALLERY TAB -->
+    <section class="tab-panel" id="gallery-tab">
+      <div class="card">
+        <h2>Indexed Images Gallery</h2>
+        <p class="subtitle" id="gallerySubtitle">Loading images from Qdrant...</p>
+
+        <div class="gallery-controls">
+          <input type="text" id="searchInput" placeholder="Search by filename..." class="search-box" />
+          <button class="btn btn--secondary" onclick="loadGallery()">Refresh</button>
+        </div>
+
+        <div class="gallery-grid" id="galleryGrid"></div>
+      </div>
+    </section>
+
+    <!-- JOB HISTORY TAB -->
+    <section class="tab-panel" id="jobs-tab">
+      <div class="card">
+        <h2>Upload Job History</h2>
+        <p class="subtitle">Track all completed and ongoing uploads</p>
+
+        <div class="jobs-table-wrapper">
+          <table class="jobs-table">
+            <thead>
+              <tr>
+                <th>Job ID</th>
+                <th>Status</th>
+                <th>Total</th>
+                <th>Processed</th>
+                <th>Failed</th>
+                <th>Progress</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="jobsTable">
+              <tr>
+                <td colspan="7" class="text-center">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>Jewellery Upload Manager | Powered by FastAPI + Qdrant</p>
+  </footer>
+
+  <script src="admin.js"></script>
+</body>
+</html>
