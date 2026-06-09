@@ -381,12 +381,9 @@ def _process_single_image(file_data: tuple) -> dict:
 
 @app.post("/add-image-batch", response_model=BatchUploadResponse)
 async def add_image_batch(files: List[UploadFile] = File(...)):
-    """Upload multiple images in parallel. Returns success/failed lists."""
+    """Upload multiple images (unlimited). Auto-batches in groups of 100 with parallel processing."""
     if not files:
         raise HTTPException(400, "No files provided.")
-
-    if len(files) > 100:
-        raise HTTPException(400, "Maximum 100 images per batch.")
 
     file_data_list = []
     for file in files:
@@ -402,31 +399,39 @@ async def add_image_batch(files: List[UploadFile] = File(...)):
     success_list = []
     failed_list = []
 
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = [executor.submit(_process_single_image, fd) for fd in file_data_list]
-        for future in futures:
-            result = future.result()
-            if result["success"]:
-                success_list.append(
-                    BatchUploadResult(
-                        id=result["id"],
-                        filename=result["filename"],
-                        image_url=result["image_url"],
+    BATCH_SIZE = 100
+    total_batches = (len(file_data_list) + BATCH_SIZE - 1) // BATCH_SIZE
+
+    for batch_num in range(total_batches):
+        start_idx = batch_num * BATCH_SIZE
+        end_idx = min((batch_num + 1) * BATCH_SIZE, len(file_data_list))
+        batch = file_data_list[start_idx:end_idx]
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = [executor.submit(_process_single_image, fd) for fd in batch]
+            for future in futures:
+                result = future.result()
+                if result["success"]:
+                    success_list.append(
+                        BatchUploadResult(
+                            id=result["id"],
+                            filename=result["filename"],
+                            image_url=result["image_url"],
+                        )
                     )
-                )
-            else:
-                failed_list.append(
-                    {
-                        "filename": result["filename"],
-                        "error": result["error"],
-                    }
-                )
+                else:
+                    failed_list.append(
+                        {
+                            "filename": result["filename"],
+                            "error": result["error"],
+                        }
+                    )
 
     return BatchUploadResponse(
         success=success_list,
         failed=failed_list,
         total=len(file_data_list),
-        message=f"{len(success_list)} uploaded, {len(failed_list)} failed.",
+        message=f"{len(success_list)} uploaded, {len(failed_list)} failed. (Processed in {total_batches} batch(es))",
     )
 
 

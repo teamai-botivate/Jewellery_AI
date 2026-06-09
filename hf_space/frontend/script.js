@@ -309,7 +309,7 @@ function escapeHtml(str) {
 
 // ── Batch Upload Functions ────────────────────────────────────
 function handleBatchFiles(files) {
-  const validImages = files.filter(f => f.type.startsWith("image/")).slice(0, 100);
+  const validImages = files.filter(f => f.type.startsWith("image/"));
   if (validImages.length === 0) {
     showError("Please select valid image files.");
     return;
