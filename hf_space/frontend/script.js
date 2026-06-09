@@ -34,6 +34,8 @@ const batchUploadBtn = document.getElementById("batchUploadBtn");
 
 let selectedFile = null;
 let batchFiles = [];
+let currentJobId = null;
+let statusCheckInterval = null;
 
 // ── Tab switching ───────────────────────────────────────────────
 tabSearchBtn.addEventListener("click", () => {
@@ -352,22 +354,15 @@ async function runBatchUpload() {
   batchUploadBtn.disabled = true;
   const formData = new FormData();
   batchFiles.forEach(file => formData.append("files", file));
+
   try {
-    const response = await fetch(`${API_BASE}/add-image-batch`, {
-      method: "POST",
-      body: formData,
-    });
-    if (!response.ok) {
-      let detail = `Server error ${response.status}`;
-      try {
-        const data = await response.json();
-        detail = data.detail || detail;
-      } catch (_) {}
-      throw new Error(detail);
+    // Check if large batch (>100 files) → use async endpoint
+    if (batchFiles.length > 100) {
+      await runBatchUploadAsync(formData);
+    } else {
+      // Small batch → use sync endpoint (faster)
+      await runBatchUploadSync(formData);
     }
-    const result = await response.json();
-    hideLoading();
-    showBatchResult(result);
     clearBatch();
   } catch (err) {
     hideLoading();
@@ -375,6 +370,81 @@ async function runBatchUpload() {
   } finally {
     batchUploadBtn.disabled = false;
   }
+}
+
+async function runBatchUploadSync(formData) {
+  const response = await fetch(`${API_BASE}/add-image-batch`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    let detail = `Server error ${response.status}`;
+    try {
+      const data = await response.json();
+      detail = data.detail || detail;
+    } catch (_) {}
+    throw new Error(detail);
+  }
+  const result = await response.json();
+  hideLoading();
+  showBatchResult(result);
+}
+
+async function runBatchUploadAsync(formData) {
+  // Start async upload
+  const startResponse = await fetch(`${API_BASE}/add-image-batch-async`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!startResponse.ok) throw new Error("Failed to start upload");
+
+  const startResult = await startResponse.json();
+  currentJobId = startResult.job_id;
+
+  hideLoading();
+  showUploadProgress(startResult.job_id);
+
+  // Poll status every 2 seconds
+  statusCheckInterval = setInterval(async () => {
+    await checkUploadStatus(startResult.job_id);
+  }, 2000);
+}
+
+async function checkUploadStatus(jobId) {
+  try {
+    const response = await fetch(`${API_BASE}/upload-status/${jobId}`);
+    if (!response.ok) return;
+
+    const status = await response.json();
+    updateUploadProgressUI(status);
+
+    if (status.status === "completed") {
+      clearInterval(statusCheckInterval);
+      showUploadComplete(status);
+    }
+  } catch (err) {
+    console.error("Status check error:", err);
+  }
+}
+
+function showUploadProgress(jobId) {
+  const msg = `
+    Upload in progress (Job: ${jobId})
+    Background processing has started.
+    Check progress below...
+  `;
+  alert(msg);
+}
+
+function updateUploadProgressUI(status) {
+  const {processed, total, failed, remaining} = status;
+  const percent = Math.round((processed / total) * 100);
+  console.log(`Progress: ${processed}/${total} (${percent}%) | Failed: ${failed}`);
+}
+
+function showUploadComplete(status) {
+  const {processed, failed, total} = status;
+  alert(`Upload Complete!\n${processed} success\n${failed} failed\nTotal: ${total}`);
 }
 
 function showBatchResult(result) {

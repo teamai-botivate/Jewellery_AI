@@ -16,6 +16,9 @@ from __future__ import annotations
 
 import os
 import uuid
+import sqlite3
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import List
@@ -52,6 +55,47 @@ if not QDRANT_URL:
     raise RuntimeError("QDRANT_URL env var is not set. Add it in HF Space → Settings → Variables.")
 if not CLD_CLOUD_NAME:
     raise RuntimeError("CLOUDINARY_CLOUD_NAME env var is not set.")
+
+# ---------------------------------------------------------------------------
+# SQLite Queue Setup
+# ---------------------------------------------------------------------------
+
+DB_PATH = Path("/tmp/upload_queue.db")
+
+def init_db():
+    """Initialize SQLite tables for job queue."""
+    conn = sqlite3.connect(str(DB_PATH))
+    c = conn.cursor()
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS upload_jobs (
+            job_id TEXT PRIMARY KEY,
+            status TEXT DEFAULT 'processing',
+            total_files INTEGER,
+            processed_count INTEGER DEFAULT 0,
+            failed_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS upload_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id TEXT,
+            filename TEXT,
+            image_bytes BLOB,
+            status TEXT DEFAULT 'pending',
+            error TEXT,
+            qdrant_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(job_id) REFERENCES upload_jobs(job_id)
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+init_db()
 
 # ---------------------------------------------------------------------------
 # Cloudinary setup
@@ -134,6 +178,128 @@ def _point_id_from(public_id: str) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Background Upload Worker
+# ---------------------------------------------------------------------------
+
+def _process_queue_item(job_id: str, queue_id: int, filename: str, image_bytes: bytes) -> dict:
+    """Process one item from queue. Returns result dict."""
+    try:
+        # Upload to Cloudinary
+        cloud = _upload_image(image_bytes, filename)
+        # Generate embedding
+        embedding = embedder.embed(image_bytes)
+        # Qdrant ID
+        point_id = _point_id_from(cloud["public_id"])
+        # Upsert to Qdrant
+        qdrant.upsert(
+            collection_name=COLLECTION,
+            points=[
+                PointStruct(
+                    id=point_id,
+                    vector=embedding.tolist(),
+                    payload={
+                        "filename": filename,
+                        "cloudinary_url": cloud["url"],
+                        "public_id": cloud["public_id"],
+                        "uploaded_at": datetime.utcnow().isoformat(),
+                    },
+                )
+            ],
+            wait=True,
+        )
+        return {"success": True, "qdrant_id": point_id, "error": None}
+    except Exception as exc:
+        return {"success": False, "qdrant_id": None, "error": str(exc)}
+
+
+def background_upload_worker():
+    """Background thread: processes upload queue continuously."""
+    while True:
+        try:
+            conn = sqlite3.connect(str(DB_PATH))
+            c = conn.cursor()
+
+            # Get next batch of pending items
+            c.execute("""
+                SELECT id, job_id, filename, image_bytes
+                FROM upload_queue
+                WHERE status='pending'
+                LIMIT 50
+            """)
+            items = c.fetchall()
+            conn.close()
+
+            if not items:
+                time.sleep(1)
+                continue
+
+            # Process each item
+            for queue_id, job_id, filename, image_bytes in items:
+                result = _process_queue_item(job_id, queue_id, filename, image_bytes)
+
+                # Update queue item
+                conn = sqlite3.connect(str(DB_PATH))
+                c = conn.cursor()
+
+                if result["success"]:
+                    c.execute("""
+                        UPDATE upload_queue
+                        SET status='done', qdrant_id=?
+                        WHERE id=?
+                    """, (result["qdrant_id"], queue_id))
+
+                    # Update job stats
+                    c.execute("""
+                        UPDATE upload_jobs
+                        SET processed_count = processed_count + 1
+                        WHERE job_id=?
+                    """, (job_id,))
+                else:
+                    c.execute("""
+                        UPDATE upload_queue
+                        SET status='failed', error=?
+                        WHERE id=?
+                    """, (result["error"], queue_id))
+
+                    # Update job stats
+                    c.execute("""
+                        UPDATE upload_jobs
+                        SET failed_count = failed_count + 1
+                        WHERE job_id=?
+                    """, (job_id,))
+
+                conn.commit()
+                conn.close()
+
+                time.sleep(0.1)  # Small delay between items
+
+            # Check if job is complete
+            conn = sqlite3.connect(str(DB_PATH))
+            c = conn.cursor()
+            c.execute("""
+                SELECT job_id, total_files, processed_count, failed_count
+                FROM upload_jobs
+                WHERE status='processing'
+            """)
+            jobs = c.fetchall()
+
+            for job_id_check, total, processed, failed in jobs:
+                if processed + failed >= total:
+                    c.execute("""
+                        UPDATE upload_jobs
+                        SET status='completed'
+                        WHERE job_id=?
+                    """, (job_id_check,))
+
+            conn.commit()
+            conn.close()
+
+        except Exception as e:
+            print(f"[Background Worker Error] {e}")
+            time.sleep(5)
+
+
+# ---------------------------------------------------------------------------
 # FastAPI app
 # ---------------------------------------------------------------------------
 
@@ -195,6 +361,19 @@ class BatchUploadResponse(BaseModel):
     failed: List[dict]
     total: int
     message: str
+
+class AsyncUploadResponse(BaseModel):
+    job_id: str
+    status: str
+    message: str
+
+class UploadStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    total: int
+    processed: int
+    failed: int
+    remaining: int
 
 
 # ---------------------------------------------------------------------------
@@ -379,6 +558,74 @@ def _process_single_image(file_data: tuple) -> dict:
         }
 
 
+@app.post("/add-image-batch-async", response_model=AsyncUploadResponse)
+async def add_image_batch_async(files: List[UploadFile] = File(...)):
+    """Upload images asynchronously. Returns job_id to track progress."""
+    if not files:
+        raise HTTPException(400, "No files provided.")
+
+    # Create job
+    job_id = str(uuid.uuid4())
+    conn = sqlite3.connect(str(DB_PATH))
+    c = conn.cursor()
+
+    c.execute("""
+        INSERT INTO upload_jobs (job_id, status, total_files)
+        VALUES (?, 'processing', ?)
+    """, (job_id, len(files)))
+
+    # Add files to queue
+    for file in files:
+        if file.content_type and file.content_type not in ALLOWED_MIME:
+            continue
+        image_bytes = await file.read()
+        if image_bytes:
+            c.execute("""
+                INSERT INTO upload_queue (job_id, filename, image_bytes, status)
+                VALUES (?, ?, ?, 'pending')
+            """, (job_id, file.filename or "upload.jpg", image_bytes))
+
+    conn.commit()
+    conn.close()
+
+    return AsyncUploadResponse(
+        job_id=job_id,
+        status="processing",
+        message=f"Upload started. {len(files)} files queued for processing.",
+    )
+
+
+@app.get("/upload-status/{job_id}", response_model=UploadStatusResponse)
+def get_upload_status(job_id: str):
+    """Get status of an upload job."""
+    conn = sqlite3.connect(str(DB_PATH))
+    c = conn.cursor()
+
+    c.execute("""
+        SELECT status, total_files, processed_count, failed_count
+        FROM upload_jobs
+        WHERE job_id=?
+    """, (job_id,))
+
+    result = c.fetchone()
+    conn.close()
+
+    if not result:
+        raise HTTPException(404, f"Job {job_id} not found.")
+
+    status, total, processed, failed = result
+    remaining = total - processed - failed
+
+    return UploadStatusResponse(
+        job_id=job_id,
+        status=status,
+        total=total,
+        processed=processed,
+        failed=failed,
+        remaining=remaining,
+    )
+
+
 @app.post("/add-image-batch", response_model=BatchUploadResponse)
 async def add_image_batch(files: List[UploadFile] = File(...)):
     """Upload multiple images (unlimited). Auto-batches in groups of 100 with 4-thread parallel processing."""
@@ -433,6 +680,22 @@ async def add_image_batch(files: List[UploadFile] = File(...)):
         total=len(file_data_list),
         message=f"{len(success_list)} uploaded, {len(failed_list)} failed. (Processed in {total_batches} batch(es))",
     )
+
+
+# ---------------------------------------------------------------------------
+# Startup: Start background worker
+# ---------------------------------------------------------------------------
+
+@app.on_event("startup")
+async def startup_event():
+    """Start background upload worker thread on app startup."""
+    worker_thread = threading.Thread(
+        target=background_upload_worker,
+        daemon=True,
+        name="UploadWorker"
+    )
+    worker_thread.start()
+    print("[Background Worker] Started")
 
 
 # ---------------------------------------------------------------------------
