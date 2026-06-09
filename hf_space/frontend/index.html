@@ -39,31 +39,78 @@
     <!-- Upload Section -->
     <section class="upload-section">
 
-      <div class="upload-card" id="dropZone">
-        <div class="upload-inner">
-          <div class="upload-icon-wrap">
-            <svg class="upload-icon" viewBox="0 0 64 64" fill="none">
-              <circle cx="32" cy="32" r="30" stroke="url(#ug)" stroke-width="1.5" stroke-dasharray="4 3"/>
-              <path d="M32 42V22M22 32l10-10 10 10" stroke="url(#ug)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-              <defs>
-                <linearGradient id="ug" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-                  <stop stop-color="#c8a96e"/>
-                  <stop offset="1" stop-color="#e8d4a0"/>
-                </linearGradient>
-              </defs>
-            </svg>
+      <div class="upload-tabs">
+        <button class="tab-btn tab-btn--active" id="tabSearch" data-tab="search">Search</button>
+        <button class="tab-btn" id="tabUpload" data-tab="upload">Upload Batch</button>
+      </div>
+
+      <!-- SEARCH TAB -->
+      <div class="tab-content tab-content--active" id="tabSearchContent">
+        <div class="upload-card" id="dropZone">
+          <div class="upload-inner">
+            <div class="upload-icon-wrap">
+              <svg class="upload-icon" viewBox="0 0 64 64" fill="none">
+                <circle cx="32" cy="32" r="30" stroke="url(#ug)" stroke-width="1.5" stroke-dasharray="4 3"/>
+                <path d="M32 42V22M22 32l10-10 10 10" stroke="url(#ug)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <defs>
+                  <linearGradient id="ug" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#c8a96e"/>
+                    <stop offset="1" stop-color="#e8d4a0"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+            <h2 class="upload-title">Drop your jewellery image here</h2>
+            <p class="upload-sub">or click to browse &mdash; JPG, PNG, WEBP supported</p>
+            <label class="btn-upload" for="fileInput">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              Choose Image
+            </label>
+            <input type="file" id="fileInput" accept="image/*" hidden />
           </div>
-          <h2 class="upload-title">Drop your jewellery image here</h2>
-          <p class="upload-sub">or click to browse &mdash; JPG, PNG, WEBP supported</p>
-          <label class="btn-upload" for="fileInput">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="17 8 12 3 7 8"/>
-              <line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-            Choose Image
-          </label>
-          <input type="file" id="fileInput" accept="image/*" hidden />
+        </div>
+      </div>
+
+      <!-- UPLOAD TAB -->
+      <div class="tab-content" id="tabUploadContent">
+        <div class="upload-card" id="dropZoneBatch">
+          <div class="upload-inner">
+            <div class="upload-icon-wrap">
+              <svg class="upload-icon" viewBox="0 0 64 64" fill="none">
+                <circle cx="32" cy="32" r="30" stroke="url(#ug2)" stroke-width="1.5" stroke-dasharray="4 3"/>
+                <path d="M32 42V22M22 32l10-10 10 10" stroke="url(#ug2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <defs>
+                  <linearGradient id="ug2" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#c8a96e"/>
+                    <stop offset="1" stop-color="#e8d4a0"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+            <h2 class="upload-title">Upload multiple images</h2>
+            <p class="upload-sub">Drop up to 100 images or click to browse</p>
+            <label class="btn-upload" for="fileInputBatch">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              Select Images
+            </label>
+            <input type="file" id="fileInputBatch" accept="image/*" multiple hidden />
+          </div>
+        </div>
+        <div class="batch-preview" id="batchPreview" style="display:none;">
+          <div class="batch-preview-header">
+            <h3>Selected Images (<span id="batchCount">0</span>)</h3>
+            <button class="btn-clear-batch" id="clearBatchBtn">Clear All</button>
+          </div>
+          <div class="batch-list" id="batchList"></div>
+          <button class="btn-batch-upload" id="batchUploadBtn">Upload All</button>
         </div>
       </div>
 

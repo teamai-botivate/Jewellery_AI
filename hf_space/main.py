@@ -19,6 +19,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import List
+from concurrent.futures import ThreadPoolExecutor
 
 import cloudinary
 import cloudinary.uploader
@@ -183,6 +184,18 @@ class HealthResponse(BaseModel):
     qdrant: str
     cloudinary: str
 
+class BatchUploadResult(BaseModel):
+    id: int
+    filename: str
+    image_url: str
+    error: str | None = None
+
+class BatchUploadResponse(BaseModel):
+    success: List[BatchUploadResult]
+    failed: List[dict]
+    total: int
+    message: str
+
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -326,6 +339,95 @@ def delete_image(image_id: int):
     )
 
     return DeleteResponse(id=image_id, message="Deleted from Cloudinary and Qdrant.")
+
+
+def _process_single_image(file_data: tuple) -> dict:
+    """Process one image: validate, upload, embed, index. Returns result dict."""
+    filename, image_bytes = file_data
+    try:
+        cloud = _upload_image(image_bytes, filename)
+        embedding = embedder.embed(image_bytes)
+        point_id = _point_id_from(cloud["public_id"])
+        qdrant.upsert(
+            collection_name=COLLECTION,
+            points=[
+                PointStruct(
+                    id=point_id,
+                    vector=embedding.tolist(),
+                    payload={
+                        "filename": filename,
+                        "cloudinary_url": cloud["url"],
+                        "public_id": cloud["public_id"],
+                        "uploaded_at": datetime.utcnow().isoformat(),
+                    },
+                )
+            ],
+            wait=True,
+        )
+        return {
+            "success": True,
+            "id": point_id,
+            "filename": filename,
+            "image_url": cloud["url"],
+            "error": None,
+        }
+    except Exception as exc:
+        return {
+            "success": False,
+            "filename": filename,
+            "error": str(exc),
+        }
+
+
+@app.post("/add-image-batch", response_model=BatchUploadResponse)
+async def add_image_batch(files: List[UploadFile] = File(...)):
+    """Upload multiple images in parallel. Returns success/failed lists."""
+    if not files:
+        raise HTTPException(400, "No files provided.")
+
+    if len(files) > 100:
+        raise HTTPException(400, "Maximum 100 images per batch.")
+
+    file_data_list = []
+    for file in files:
+        if file.content_type and file.content_type not in ALLOWED_MIME:
+            continue
+        image_bytes = await file.read()
+        if image_bytes:
+            file_data_list.append((file.filename or "upload.jpg", image_bytes))
+
+    if not file_data_list:
+        raise HTTPException(400, "No valid images in batch.")
+
+    success_list = []
+    failed_list = []
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = [executor.submit(_process_single_image, fd) for fd in file_data_list]
+        for future in futures:
+            result = future.result()
+            if result["success"]:
+                success_list.append(
+                    BatchUploadResult(
+                        id=result["id"],
+                        filename=result["filename"],
+                        image_url=result["image_url"],
+                    )
+                )
+            else:
+                failed_list.append(
+                    {
+                        "filename": result["filename"],
+                        "error": result["error"],
+                    }
+                )
+
+    return BatchUploadResponse(
+        success=success_list,
+        failed=failed_list,
+        total=len(file_data_list),
+        message=f"{len(success_list)} uploaded, {len(failed_list)} failed.",
+    )
 
 
 # ---------------------------------------------------------------------------

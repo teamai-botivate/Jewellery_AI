@@ -553,6 +553,153 @@ body {
   color: var(--gold-dim);
 }
 
+/* ── Tabs ─────────────────────────────────────────────────── */
+.upload-tabs {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab-btn {
+  padding: .75rem 1.5rem;
+  background: transparent;
+  border: none;
+  color: var(--text-sub);
+  font-size: .95rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color var(--transition), border-color var(--transition);
+}
+
+.tab-btn:hover {
+  color: var(--text);
+}
+
+.tab-btn--active {
+  color: var(--gold);
+  border-bottom-color: var(--gold);
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content--active {
+  display: block;
+}
+
+/* ── Batch Upload ─────────────────────────────────────────── */
+.batch-preview {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.batch-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.batch-preview-header h3 {
+  font-size: 1rem;
+  color: var(--gold);
+}
+
+.batch-list {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+}
+
+.batch-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .75rem;
+  background: var(--bg-card2);
+  border-radius: var(--radius-sm);
+  font-size: .9rem;
+}
+
+.batch-item-name {
+  flex: 1;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.batch-item-size {
+  color: var(--text-muted);
+  font-size: .85rem;
+  margin: 0 1rem;
+}
+
+.batch-item-remove {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: rgba(224,85,85,.2);
+  color: #ff8080;
+  border-radius: 4px;
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition);
+}
+
+.batch-item-remove:hover {
+  background: rgba(224,85,85,.35);
+}
+
+.btn-batch-upload {
+  width: 100%;
+  padding: .9rem;
+  background: linear-gradient(135deg, var(--gold), var(--gold-light));
+  color: #08080f;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: .95rem;
+  cursor: pointer;
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+
+.btn-batch-upload:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(200,169,110,.3);
+}
+
+.btn-batch-upload:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-clear-batch {
+  padding: .4rem .8rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-sub);
+  border-radius: var(--radius-sm);
+  font-size: .85rem;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.btn-clear-batch:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
 /* ── Footer ───────────────────────────────────────────────── */
 .footer {
   text-align: center;

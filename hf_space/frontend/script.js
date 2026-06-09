@@ -22,7 +22,33 @@ const topkRow        = document.getElementById("topkRow");
 const topkSlider     = document.getElementById("topkSlider");
 const topkVal        = document.getElementById("topkVal");
 
+const tabSearchBtn    = document.getElementById("tabSearch");
+const tabUploadBtn    = document.getElementById("tabUpload");
+const dropZoneBatch  = document.getElementById("dropZoneBatch");
+const fileInputBatch = document.getElementById("fileInputBatch");
+const batchPreview   = document.getElementById("batchPreview");
+const batchList      = document.getElementById("batchList");
+const batchCount     = document.getElementById("batchCount");
+const clearBatchBtn  = document.getElementById("clearBatchBtn");
+const batchUploadBtn = document.getElementById("batchUploadBtn");
+
 let selectedFile = null;
+let batchFiles = [];
+
+// ── Tab switching ───────────────────────────────────────────────
+tabSearchBtn.addEventListener("click", () => {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("tab-btn--active"));
+  document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("tab-content--active"));
+  tabSearchBtn.classList.add("tab-btn--active");
+  document.getElementById("tabSearchContent").classList.add("tab-content--active");
+});
+
+tabUploadBtn.addEventListener("click", () => {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("tab-btn--active"));
+  document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("tab-content--active"));
+  tabUploadBtn.classList.add("tab-btn--active");
+  document.getElementById("tabUploadContent").classList.add("tab-content--active");
+});
 
 // ── Top-K slider ─────────────────────────────────────────────
 topkSlider.addEventListener("input", () => {
@@ -70,6 +96,31 @@ searchBtn.addEventListener("click", () => {
 });
 
 clearBtn.addEventListener("click", clearAll);
+
+// ── Batch Upload ──────────────────────────────────────────────
+dropZoneBatch.addEventListener("dragenter", (e) => { e.preventDefault(); dropZoneBatch.classList.add("drag-over"); });
+dropZoneBatch.addEventListener("dragover",  (e) => { e.preventDefault(); });
+dropZoneBatch.addEventListener("dragleave", () => { dropZoneBatch.classList.remove("drag-over"); });
+dropZoneBatch.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropZoneBatch.classList.remove("drag-over");
+  const files = Array.from(e.dataTransfer.files);
+  handleBatchFiles(files);
+});
+
+dropZoneBatch.addEventListener("click", (e) => {
+  if (e.target.closest("label")) return;
+  fileInputBatch.click();
+});
+
+fileInputBatch.addEventListener("change", () => {
+  if (fileInputBatch.files.length) {
+    handleBatchFiles(Array.from(fileInputBatch.files));
+  }
+});
+
+clearBatchBtn.addEventListener("click", clearBatch);
+batchUploadBtn.addEventListener("click", runBatchUpload);
 
 // ── File handling ─────────────────────────────────────────────
 function handleFile(file) {
@@ -254,4 +305,83 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+// ── Batch Upload Functions ────────────────────────────────────
+function handleBatchFiles(files) {
+  const validImages = files.filter(f => f.type.startsWith("image/")).slice(0, 100);
+  if (validImages.length === 0) {
+    showError("Please select valid image files.");
+    return;
+  }
+  batchFiles = validImages;
+  renderBatchPreview();
+}
+
+function renderBatchPreview() {
+  batchCount.textContent = batchFiles.length;
+  batchList.innerHTML = "";
+  batchFiles.forEach((file, idx) => {
+    const item = document.createElement("div");
+    item.className = "batch-item";
+    item.innerHTML = `
+      <span class="batch-item-name">${escapeHtml(file.name)}</span>
+      <span class="batch-item-size">${(file.size / 1024).toFixed(1)} KB</span>
+      <button class="batch-item-remove" onclick="removeBatchFile(${idx})">×</button>
+    `;
+    batchList.appendChild(item);
+  });
+  batchPreview.style.display = batchFiles.length > 0 ? "block" : "none";
+}
+
+function removeBatchFile(idx) {
+  batchFiles.splice(idx, 1);
+  renderBatchPreview();
+}
+
+function clearBatch() {
+  batchFiles = [];
+  fileInputBatch.value = "";
+  batchPreview.style.display = "none";
+}
+
+async function runBatchUpload() {
+  if (batchFiles.length === 0) return;
+  hideError();
+  showLoading();
+  batchUploadBtn.disabled = true;
+  const formData = new FormData();
+  batchFiles.forEach(file => formData.append("files", file));
+  try {
+    const response = await fetch(`${API_BASE}/add-image-batch`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) {
+      let detail = `Server error ${response.status}`;
+      try {
+        const data = await response.json();
+        detail = data.detail || detail;
+      } catch (_) {}
+      throw new Error(detail);
+    }
+    const result = await response.json();
+    hideLoading();
+    showBatchResult(result);
+    clearBatch();
+  } catch (err) {
+    hideLoading();
+    showError(err.message);
+  } finally {
+    batchUploadBtn.disabled = false;
+  }
+}
+
+function showBatchResult(result) {
+  const msg = `✅ ${result.success.length} uploaded successfully\n❌ ${result.failed.length} failed`;
+  alert(msg);
+  if (result.failed.length > 0) {
+    const failedMsg = result.failed.map(f => `${f.filename}: ${f.error}`).join("\n");
+    console.log("Failed uploads:\n" + failedMsg);
+  }
 }
